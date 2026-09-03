@@ -126,3 +126,111 @@ fn resolve_value(token: &str, names: &[(&str, u32)]) -> Result<u32, String> {
         .parse::<u32>()
         .map_err(|_| format!("invalid value '{token}'"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_value() {
+        assert_eq!(parse_field("5", 0, 59, &[]).unwrap(), vec![5]);
+    }
+
+    #[test]
+    fn wildcard_covers_full_range() {
+        assert_eq!(parse_field("*", 0, 3, &[]).unwrap(), vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn range_is_inclusive() {
+        assert_eq!(parse_field("1-5", 0, 59, &[]).unwrap(), vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn list_is_sorted_and_deduped() {
+        assert_eq!(parse_field("5,1,3,1", 0, 59, &[]).unwrap(), vec![1, 3, 5]);
+    }
+
+    #[test]
+    fn step_on_wildcard() {
+        assert_eq!(parse_field("*/15", 0, 59, &[]).unwrap(), vec![0, 15, 30, 45]);
+    }
+
+    #[test]
+    fn step_on_range() {
+        assert_eq!(parse_field("1-10/3", 0, 59, &[]).unwrap(), vec![1, 4, 7, 10]);
+    }
+
+    #[test]
+    fn step_does_not_overshoot_range_end() {
+        // a step that lands past the range's upper bound must not be included
+        assert_eq!(parse_field("0-10/4", 0, 59, &[]).unwrap(), vec![0, 4, 8]);
+    }
+
+    #[test]
+    fn named_month_is_case_insensitive() {
+        assert_eq!(parse_field("jan", 1, 12, MONTH_NAMES).unwrap(), vec![1]);
+        assert_eq!(parse_field("DEC", 1, 12, MONTH_NAMES).unwrap(), vec![12]);
+    }
+
+    #[test]
+    fn named_range_resolves_both_ends() {
+        assert_eq!(
+            parse_field("MON-FRI", 0, 7, DOW_NAMES).unwrap(),
+            vec![1, 2, 3, 4, 5]
+        );
+    }
+
+    #[test]
+    fn rejects_zero_step() {
+        assert!(parse_field("*/0", 0, 59, &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_out_of_range_value() {
+        assert!(parse_field("60", 0, 59, &[]).is_err());
+        assert!(parse_field("-1", 0, 59, &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_inverted_range() {
+        assert!(parse_field("5-3", 0, 59, &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_list_component() {
+        assert!(parse_field("1,,3", 0, 59, &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_name() {
+        assert!(parse_field("FOO", 1, 12, MONTH_NAMES).is_err());
+    }
+
+    #[test]
+    fn schedule_requires_five_fields() {
+        assert!(CronSchedule::parse("* * * *").is_err());
+        assert!(CronSchedule::parse("* * * * * *").is_err());
+    }
+
+    #[test]
+    fn schedule_normalizes_sunday_seven_to_zero() {
+        let s = CronSchedule::parse("0 0 * * 0,7").unwrap();
+        assert_eq!(s.day_of_week, vec![0]);
+    }
+
+    #[test]
+    fn schedule_tracks_dom_and_dow_restriction() {
+        let unrestricted = CronSchedule::parse("* * * * *").unwrap();
+        assert!(!unrestricted.dom_restricted);
+        assert!(!unrestricted.dow_restricted);
+
+        let both_restricted = CronSchedule::parse("0 9 1 * MON").unwrap();
+        assert!(both_restricted.dom_restricted);
+        assert!(both_restricted.dow_restricted);
+
+        let dow_only = CronSchedule::parse("0 9 * * MON").unwrap();
+        assert!(!dow_only.dom_restricted);
+        assert!(dow_only.dow_restricted);
+    }
+}
