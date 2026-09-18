@@ -12,7 +12,7 @@ Read from stdin:
 
 ```
 $ echo '*/15 * * * *' | cronvert
-*-*-* *:00,15,30,45:00
+*-*-* *:00/15:00
 ```
 
 Read from a file:
@@ -21,7 +21,7 @@ Read from a file:
 $ cat deploy.cron
 30 2 * * 1-5
 $ cronvert deploy.cron
-Mon,Tue,Wed,Thu,Fri *-*-* 02:30:00
+Mon..Fri *-*-* 02:30:00
 ```
 
 Read from stdin explicitly with `-`:
@@ -34,7 +34,7 @@ Drop the output straight into a unit file:
 
 ```
 [Timer]
-OnCalendar=Mon,Tue,Wed,Thu,Fri *-*-* 02:30:00
+OnCalendar=Mon..Fri *-*-* 02:30:00
 ```
 
 ## Supported cron syntax
@@ -47,6 +47,12 @@ OnCalendar=Mon,Tue,Wed,Thu,Fri *-*-* 02:30:00
 - steps, on their own or on a range (`*/15`, `1-30/5`)
 - month names (`JAN`-`DEC`) and weekday names (`SUN`-`SAT`), case-insensitive
 - both `0` and `7` for Sunday in the day-of-week field
+
+Output uses systemd's compact forms where they apply: contiguous runs become
+`a..b`, evenly spaced runs become `a/step` (or `a..b/step` if they stop short
+of the field's own max), and weekdays get named ranges like `Mon..Fri` — the
+`OnCalendar` grammar has no step syntax for weekdays, so those are always
+spelled out as a list.
 
 ## A known limitation
 
